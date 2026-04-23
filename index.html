@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Unsere Einkaufsliste</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=2" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <main class="app-card">
+        <section class="hero">
+          <p class="eyebrow">Gemeinsam einkaufen</p>
+          <h1>Eine Einkaufsliste, die ihr beide live pflegen könnt.</h1>
+          <p class="hero-copy">
+            Google-Login, gemeinsamer Haushalt und eine einfache Liste für Handy
+            und Desktop.
+          </p>
+        </section>
+
+        <section id="auth-view" class="panel auth-panel">
+          <div class="panel-copy">
+            <h2>Einloggen</h2>
+            <p>
+              Meldet euch mit Google an. Danach könnt ihr denselben Haushalt
+              nutzen und Einträge in Echtzeit teilen.
+            </p>
+          </div>
+          <button id="login-button" class="primary-button" type="button">
+            Mit Google anmelden
+          </button>
+          <p id="auth-message" class="status-text"></p>
+        </section>
+
+        <section id="app-view" class="panel app-panel hidden">
+          <div class="app-header">
+            <div>
+              <p class="eyebrow">Euer Haushalt</p>
+              <h2 id="household-name">Haushalt</h2>
+            </div>
+            <div class="user-block">
+              <img id="user-avatar" class="avatar" alt="Profilbild" />
+              <div>
+                <p id="user-name" class="user-name"></p>
+                <button id="logout-button" class="ghost-button" type="button">
+                  Abmelden
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <form id="create-household-form" class="stack hidden">
+            <label class="field-label" for="household-input">
+              Haushalt erstellen
+            </label>
+            <div class="inline-form">
+              <input
+                id="household-input"
+                name="household"
+                type="text"
+                maxlength="40"
+                placeholder="z. B. Familie Müller"
+                required
+              />
+              <button class="primary-button" type="submit">Anlegen</button>
+            </div>
+            <p class="hint-text">
+              Der erste eingeloggte Nutzer erstellt euren gemeinsamen Haushalt.
+            </p>
+          </form>
+
+          <section id="invite-panel" class="invite-panel hidden">
+            <p class="field-label">Partner-Code</p>
+            <div class="invite-box">
+              <strong id="invite-code"></strong>
+              <button id="copy-code-button" class="ghost-button" type="button">
+                Code kopieren
+              </button>
+            </div>
+            <p class="hint-text">
+              Deine Frau kann sich anmelden und diesen Code eingeben, um eurem
+              Haushalt beizutreten.
+            </p>
+          </section>
+
+          <section id="approval-panel" class="invite-panel hidden">
+            <p class="field-label">Freigabe ausstehend</p>
+            <p class="hint-text">
+              Dein Konto ist angemeldet, aber noch nicht freigegeben. Sobald
+              Christoph dich bestaetigt, kannst du den Haushalt nutzen.
+            </p>
+          </section>
+
+          <section id="admin-panel" class="list-panel hidden">
+            <div class="list-header">
+              <h3>Freigaben</h3>
+              <span id="pending-count" class="pill">0 offen</span>
+            </div>
+            <ul id="pending-users" class="shopping-list"></ul>
+          </section>
+
+          <section id="lists-panel" class="list-panel hidden">
+            <div class="list-header">
+              <div>
+                <h3>Einkaufslisten</h3>
+                <p class="hint-text">
+                  Lege mehrere Listen an und wechsle je nach Geschaeft zwischen ihnen.
+                </p>
+              </div>
+            </div>
+
+            <div class="profile-toolbar">
+              <select id="list-select" aria-label="Einkaufsliste auswählen"></select>
+              <button id="new-list-button" class="secondary-button" type="button">
+                Neue Liste
+              </button>
+              <button id="edit-list-button" class="ghost-button" type="button">
+                Liste bearbeiten
+              </button>
+            </div>
+
+            <form id="list-editor" class="profile-editor hidden">
+              <div class="profile-editor-header">
+                <label class="field-label" for="list-name-input">Listenname</label>
+                <input
+                  id="list-name-input"
+                  type="text"
+                  maxlength="40"
+                  placeholder="z. B. Kaufland"
+                  required
+                />
+              </div>
+
+              <div>
+                <p class="field-label">Sortiervorgabe</p>
+                <p class="hint-text">
+                  Lege die Kategorien in deiner Laufreihenfolge durch den Laden fest.
+                </p>
+                <ul id="list-order-list" class="profile-order-list"></ul>
+              </div>
+
+              <div class="edit-actions">
+                <button id="save-list-button" class="primary-button" type="submit">
+                  Einkaufsliste speichern
+                </button>
+                <button id="cancel-list-button" class="ghost-button" type="button">
+                  Abbrechen
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <form id="join-household-form" class="stack hidden">
+            <label class="field-label" for="join-code-input">
+              Haushalt beitreten
+            </label>
+            <div class="inline-form">
+              <input
+                id="join-code-input"
+                name="joinCode"
+                type="text"
+                maxlength="12"
+                placeholder="Code eingeben"
+                required
+              />
+              <button class="secondary-button" type="submit">
+                Beitreten
+              </button>
+            </div>
+          </form>
+
+          <form id="item-form" class="stack hidden">
+            <label class="field-label" for="item-input">Neuer Eintrag</label>
+            <div class="item-form-grid">
+              <input
+                id="item-input"
+                name="item"
+                type="text"
+                maxlength="80"
+                placeholder="z. B. Milch"
+                required
+              />
+              <input
+                id="quantity-input"
+                name="quantity"
+                type="text"
+                maxlength="20"
+                placeholder="Menge, z. B. 2x"
+              />
+              <select id="category-input" name="category" aria-label="Kategorie">
+                <option value="Allgemein">Allgemein</option>
+                <option value="Obst & Gemüse">Obst & Gemüse</option>
+                <option value="Kühlschrank">Kühlschrank</option>
+                <option value="Getränke">Getränke</option>
+                <option value="Backen & Kochen">Backen & Kochen</option>
+                <option value="Drogerie">Drogerie</option>
+                <option value="Haushalt">Haushalt</option>
+              </select>
+              <button class="primary-button" type="submit">Hinzufügen</button>
+            </div>
+          </form>
+
+          <section id="list-panel" class="list-panel hidden">
+            <div class="list-header">
+              <h3>Liste</h3>
+              <span id="item-count" class="pill">0 Artikel</span>
+            </div>
+            <ul id="shopping-list" class="shopping-list"></ul>
+          </section>
+
+          <p id="app-message" class="status-text"></p>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js?v=14"></script>
+  </body>
+</html>

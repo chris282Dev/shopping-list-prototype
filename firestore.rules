@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isAppAdmin() {
+      return signedIn() && request.auth.token.email == "christophwieczorektest1@gmail.com";
+    }
+
+    function isApproved() {
+      return signedIn() && (isAppAdmin() || userDoc(request.auth.uid).data.approvalStatus == "approved");
+    }
+
+    function currentHouseholdId() {
+      return isApproved() ? userDoc(request.auth.uid).data.householdId : null;
+    }
+
+    function isMember(householdId) {
+      return isApproved() && householdId != null && currentHouseholdId() == householdId;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAppAdmin());
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == (isAppAdmin() ? "admin" : "user")
+        && request.resource.data.approvalStatus == (isAppAdmin() ? "approved" : "pending");
+      allow update: if isAppAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.approvalStatus == resource.data.approvalStatus
+          && request.resource.data.approvedBy == resource.data.approvedBy
+        );
+    }
+
+    match /households/{householdId} {
+      allow create: if isApproved() && request.resource.data.ownerId == request.auth.uid;
+      allow read: if isApproved();
+      allow update: if isMember(householdId);
+      allow delete: if false;
+    }
+
+    match /items/{itemId} {
+      allow read: if isMember(resource.data.householdId);
+
+      allow create: if signedIn()
+        && isMember(request.resource.data.householdId)
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isMember(resource.data.householdId);
+    }
+
+    match /categoryProfiles/{profileId} {
+      allow read: if isMember(resource.data.householdId);
+      allow create: if isApproved()
+        && isMember(request.resource.data.householdId)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isMember(resource.data.householdId);
+    }
+
+    match /shoppingLists/{listId} {
+      allow read: if isMember(resource.data.householdId);
+      allow create: if isApproved()
+        && isMember(request.resource.data.householdId)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isMember(resource.data.householdId);
+    }
+  }
+}
