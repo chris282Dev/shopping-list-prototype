@@ -69,7 +69,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-const ADMIN_EMAILS = ["christophwieczorektest1@gmail.com"];
 const CATEGORY_OPTIONS = [
   "Obst & Gemüse",
   "Kühlschrank",
@@ -115,10 +114,6 @@ function formatTimestamp(value) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(value.toDate());
-}
-
-function isAdminEmail(email) {
-  return Boolean(email) && ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
 function buildCategoryOptions(selectedValue) {
@@ -418,7 +413,6 @@ async function ensureUserProfile(user) {
   const userRef = doc(db, "users", user.uid);
   const existingProfile = await getDoc(userRef);
   const existingData = existingProfile.exists() ? existingProfile.data() : null;
-  const admin = isAdminEmail(user.email);
 
   await setDoc(
     userRef,
@@ -427,10 +421,10 @@ async function ensureUserProfile(user) {
       name: user.displayName,
       householdId: existingData ? (existingData.householdId ?? null) : null,
       approvalStatus: existingData
-        ? (existingData.approvalStatus ?? (admin ? "approved" : "pending"))
-        : (admin ? "approved" : "pending"),
-      approvedBy: existingData?.approvedBy ?? (admin ? user.email : null),
-      role: existingData?.role ?? (admin ? "admin" : "user"),
+        ? (existingData.approvalStatus ?? "pending")
+        : "pending",
+      approvedBy: existingData?.approvedBy ?? null,
+      role: existingData?.role ?? "user",
       photoURL: user.photoURL,
       updatedAt: serverTimestamp(),
     },
@@ -840,7 +834,7 @@ async function syncHouseholdState(user) {
   const profile = await getUserProfile(user.uid);
   const householdId = profile?.householdId;
   const isApproved = profile?.approvalStatus === "approved";
-  const isAdmin = profile?.role === "admin" || isAdminEmail(user.email);
+  const isAdmin = profile?.role === "admin";
   const wasPreviouslyApproved = sessionStorage.getItem("approval_seen") === "true";
 
   approvalPanel?.classList.toggle("hidden", isApproved);
@@ -870,7 +864,7 @@ async function syncHouseholdState(user) {
       appMessage,
       profile?.approvalStatus === "rejected"
         ? "Diese Anmeldung wurde abgelehnt."
-        : "Neue Anmeldungen muessen erst bestaetigt werden.",
+        : "Neue Anmeldung muss erst bestaetigt werden.",
       profile?.approvalStatus === "rejected",
     );
     return;
