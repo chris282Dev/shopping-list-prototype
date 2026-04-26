@@ -1,14 +1,17 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
 import {
   browserLocalPersistence,
+  createUserWithEmailAndPassword,
   getAuth,
   getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   setPersistence,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
   signOut,
+  updateProfile,
 } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
 import {
   addDoc,
@@ -26,14 +29,26 @@ import {
   updateDoc,
   where,
 } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import { firebaseConfig, googleCalendarConfig } from "./firebase-config.js";
 
 const authView = document.querySelector("#auth-view");
 const appView = document.querySelector("#app-view");
 const loginButton = document.querySelector("#login-button");
 const logoutButton = document.querySelector("#logout-button");
+const emailLoginForm = document.querySelector("#email-login-form");
+const emailRegisterForm = document.querySelector("#email-register-form");
+const emailLoginInput = document.querySelector("#email-login-input");
+const emailLoginPassword = document.querySelector("#email-login-password");
+const registerNameInput = document.querySelector("#register-name-input");
+const registerEmailInput = document.querySelector("#register-email-input");
+const registerPasswordInput = document.querySelector("#register-password-input");
 const authMessage = document.querySelector("#auth-message");
 const appMessage = document.querySelector("#app-message");
+const shoppingView = document.querySelector("#shopping-view");
+const calendarView = document.querySelector("#calendar-view");
+const viewSwitcher = document.querySelector("#view-switcher");
+const shoppingViewButton = document.querySelector("#shopping-view-button");
+const calendarViewButton = document.querySelector("#calendar-view-button");
 const approvalPanel = document.querySelector("#approval-panel");
 const adminPanel = document.querySelector("#admin-panel");
 const createHouseholdForm = document.querySelector("#create-household-form");
@@ -63,6 +78,13 @@ const pendingUsers = document.querySelector("#pending-users");
 const pendingCount = document.querySelector("#pending-count");
 const shoppingList = document.querySelector("#shopping-list");
 const itemCount = document.querySelector("#item-count");
+const calendarStatusPill = document.querySelector("#calendar-status-pill");
+const connectCalendarButton = document.querySelector("#connect-calendar-button");
+const refreshCalendarButton = document.querySelector("#refresh-calendar-button");
+const calendarRangeSelect = document.querySelector("#calendar-range-select");
+const calendarSourceSelect = document.querySelector("#calendar-source-select");
+const calendarMessage = document.querySelector("#calendar-message");
+const calendarEvents = document.querySelector("#calendar-events");
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -90,6 +112,13 @@ let activeListId = null;
 let editingListId = null;
 let editingListOrder = [...CATEGORY_OPTIONS];
 let completedCollapsed = false;
+let activeView = "shopping";
+let googleCalendarInitialized = false;
+let googleCalendarReady = false;
+let googleCalendarAccessToken = "";
+let googleCalendarTokenClient = null;
+let googleCalendarCalendars = [];
+let currentCalendarEvents = [];
 
 function setMessage(target, message, isError = false) {
   target.textContent = message;
@@ -99,6 +128,161 @@ function setMessage(target, message, isError = false) {
 function clearMessage(target) {
   target.textContent = "";
   target.style.color = "";
+}
+
+function setCalendarConnectionState(isConnected) {
+  googleCalendarReady = isConnected;
+  calendarStatusPill.textContent = isConnected ? "Verbunden" : "Nicht verbunden";
+  refreshCalendarButton.disabled = !isConnected;
+  calendarRangeSelect.disabled = !isConnected;
+  calendarSourceSelect.disabled = !isConnected;
+  connectCalendarButton.textContent = isConnected
+    ? "Google Kalender erneut verbinden"
+    : "Google Kalender verbinden";
+}
+
+function renderActiveView() {
+  const showShopping = activeView === "shopping";
+  shoppingView.classList.toggle("hidden", !showShopping);
+  calendarView.classList.toggle("hidden", showShopping);
+  shoppingViewButton.classList.toggle("view-button-active", showShopping);
+  calendarViewButton.classList.toggle("view-button-active", !showShopping);
+}
+
+function getCalendarDateLabel(event) {
+  const start = event.start?.dateTime || event.start?.date;
+  if (!start) {
+    return "Ohne Datum";
+  }
+
+  if (event.start?.date) {
+    return new Intl.DateTimeFormat("de-DE", {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(event.start.date));
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(event.start.dateTime));
+}
+
+function renderCalendarSources() {
+  const previousValue = calendarSourceSelect.value || "all";
+  calendarSourceSelect.innerHTML = "";
+
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "Alle Kalender";
+  calendarSourceSelect.append(allOption);
+
+  for (const calendar of googleCalendarCalendars) {
+    const option = document.createElement("option");
+    option.value = calendar.id;
+    option.textContent = calendar.summaryOverride || calendar.summary || "Unbenannter Kalender";
+    calendarSourceSelect.append(option);
+  }
+
+  const validValue = [allOption.value, ...googleCalendarCalendars.map((entry) => entry.id)].includes(
+    previousValue,
+  )
+    ? previousValue
+    : "all";
+  calendarSourceSelect.value = validValue;
+}
+
+function renderCalendarEvents(events = []) {
+  calendarEvents.innerHTML = "";
+  currentCalendarEvents = events;
+
+  if (!events.length) {
+    const emptyState = document.createElement("li");
+    emptyState.className = "calendar-event-row";
+
+    const title = document.createElement("p");
+    title.className = "calendar-event-title";
+    title.textContent = googleCalendarReady
+      ? "Keine Termine im gewählten Zeitraum"
+      : "Noch kein Kalender verbunden";
+
+    const meta = document.createElement("p");
+    meta.className = "calendar-event-meta";
+    meta.textContent = googleCalendarReady
+      ? "Versuche einen anderen Zeitraum oder einen anderen Kalender."
+      : "Verbinde zuerst euren Google Kalender, um Termine zu sehen.";
+
+    emptyState.append(title, meta);
+    calendarEvents.append(emptyState);
+    return;
+  }
+
+  for (const event of events) {
+    const row = document.createElement("li");
+    row.className = "calendar-event-row";
+
+    const title = document.createElement("p");
+    title.className = "calendar-event-title";
+    title.textContent = event.summary || "Ohne Titel";
+
+    const meta = document.createElement("p");
+    meta.className = "calendar-event-meta";
+    meta.textContent = `${getCalendarDateLabel(event)} • ${
+      event._calendarName || "Kalender"
+    }`;
+
+    row.append(title, meta);
+
+    if (event.location) {
+      const location = document.createElement("p");
+      location.className = "calendar-event-location";
+      location.textContent = event.location;
+      row.append(location);
+    }
+
+    calendarEvents.append(row);
+  }
+}
+
+function getCalendarRange() {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+  const range = calendarRangeSelect.value || "today";
+
+  if (range === "today") {
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (range === "week") {
+    const day = start.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + diffToMonday);
+    start.setHours(0, 0, 0, 0);
+    end.setTime(start.getTime());
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  end.setMonth(end.getMonth() + 1, 0);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function ensureGoogleCalendarConfigured() {
+  return Boolean(
+    googleCalendarConfig?.apiKey?.trim() && googleCalendarConfig?.clientId?.trim(),
+  );
 }
 
 function generateJoinCode() {
@@ -116,6 +300,53 @@ function formatTimestamp(value) {
   }).format(value.toDate());
 }
 
+function getDisplayNameForUser(user, existingData = null) {
+  if (user.displayName?.trim()) {
+    return user.displayName.trim();
+  }
+
+  if (existingData?.name?.trim()) {
+    return existingData.name.trim();
+  }
+
+  if (user.email) {
+    return user.email.split("@")[0];
+  }
+
+  return "Neuer Nutzer";
+}
+
+function formatAuthError(error) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message.includes("auth/email-already-in-use")) {
+    return "Diese E-Mail-Adresse ist bereits registriert.";
+  }
+
+  if (
+    message.includes("auth/invalid-credential") ||
+    message.includes("auth/user-not-found") ||
+    message.includes("auth/wrong-password") ||
+    message.includes("auth/invalid-login-credentials")
+  ) {
+    return "E-Mail oder Passwort sind nicht korrekt.";
+  }
+
+  if (message.includes("auth/weak-password")) {
+    return "Das Passwort ist zu schwach. Bitte waehle mindestens 6 Zeichen.";
+  }
+
+  if (message.includes("auth/invalid-email")) {
+    return "Bitte gib eine gueltige E-Mail-Adresse ein.";
+  }
+
+  if (message.includes("auth/operation-not-allowed")) {
+    return "E-Mail-Login ist noch nicht aktiviert.";
+  }
+
+  return message || "Anmeldung fehlgeschlagen.";
+}
+
 function buildCategoryOptions(selectedValue) {
   return CATEGORY_OPTIONS.map((category) => {
     const option = document.createElement("option");
@@ -124,6 +355,170 @@ function buildCategoryOptions(selectedValue) {
     option.selected = category === selectedValue;
     return option;
   });
+}
+
+function waitForGlobal(globalName, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+
+    function check() {
+      if (window[globalName]) {
+        resolve(window[globalName]);
+        return;
+      }
+
+      if (Date.now() - started > timeoutMs) {
+        reject(new Error(`${globalName} konnte nicht geladen werden.`));
+        return;
+      }
+
+      window.setTimeout(check, 50);
+    }
+
+    check();
+  });
+}
+
+async function initializeGoogleCalendar() {
+  if (googleCalendarInitialized) {
+    return;
+  }
+
+  if (!ensureGoogleCalendarConfigured()) {
+    setMessage(
+      calendarMessage,
+      "Google Kalender ist noch nicht fertig konfiguriert. Es fehlen API-Key oder Client-ID.",
+      true,
+    );
+    return;
+  }
+
+  const gapi = await waitForGlobal("gapi");
+  const google = await waitForGlobal("google");
+
+  await new Promise((resolve, reject) => {
+    gapi.load("client", {
+      callback: resolve,
+      onerror: () => reject(new Error("Google API Client konnte nicht geladen werden.")),
+      timeout: 10000,
+      ontimeout: () => reject(new Error("Google API Client hat beim Laden zu lange gebraucht.")),
+    });
+  });
+
+  await gapi.client.init({
+    apiKey: googleCalendarConfig.apiKey,
+    discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"],
+  });
+
+  googleCalendarTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: googleCalendarConfig.clientId,
+    scope: "https://www.googleapis.com/auth/calendar.readonly",
+    callback: "",
+  });
+
+  googleCalendarInitialized = true;
+}
+
+function requestGoogleCalendarAccess() {
+  return new Promise(async (resolve, reject) => {
+    try {
+      await initializeGoogleCalendar();
+      if (!googleCalendarTokenClient) {
+        reject(new Error("Google Kalender ist noch nicht konfiguriert."));
+        return;
+      }
+
+      googleCalendarTokenClient.callback = (response) => {
+        if (response.error) {
+          reject(new Error(response.error));
+          return;
+        }
+
+        googleCalendarAccessToken = response.access_token;
+        setCalendarConnectionState(true);
+        resolve(response);
+      };
+
+      googleCalendarTokenClient.requestAccessToken({
+        prompt: googleCalendarAccessToken ? "" : "consent",
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function loadGoogleCalendars() {
+  const { gapi } = window;
+  const response = await gapi.client.calendar.calendarList.list({
+    showHidden: false,
+  });
+
+  googleCalendarCalendars = (response.result.items || []).filter(
+    (entry) => entry.accessRole && entry.accessRole !== "none",
+  );
+
+  renderCalendarSources();
+}
+
+async function loadGoogleCalendarEvents() {
+  if (!googleCalendarReady) {
+    renderCalendarEvents([]);
+    return;
+  }
+
+  clearMessage(calendarMessage);
+
+  try {
+    await loadGoogleCalendars();
+
+    const selectedCalendarId = calendarSourceSelect.value || "all";
+    const calendarsToLoad =
+      selectedCalendarId === "all"
+        ? googleCalendarCalendars
+        : googleCalendarCalendars.filter((entry) => entry.id === selectedCalendarId);
+
+    const { start, end } = getCalendarRange();
+    const { gapi } = window;
+
+    const eventResponses = await Promise.all(
+      calendarsToLoad.map(async (calendar) => {
+        const response = await gapi.client.calendar.events.list({
+          calendarId: calendar.id,
+          singleEvents: true,
+          orderBy: "startTime",
+          showDeleted: false,
+          timeMin: start.toISOString(),
+          timeMax: end.toISOString(),
+          maxResults: 50,
+        });
+
+        return (response.result.items || []).map((event) => ({
+          ...event,
+          _calendarName: calendar.summaryOverride || calendar.summary || "Kalender",
+        }));
+      }),
+    );
+
+    const mergedEvents = eventResponses
+      .flat()
+      .sort((left, right) => {
+        const leftValue = left.start?.dateTime || left.start?.date || "";
+        const rightValue = right.start?.dateTime || right.start?.date || "";
+        return new Date(leftValue).getTime() - new Date(rightValue).getTime();
+      });
+
+    renderCalendarEvents(mergedEvents);
+    calendarStatusPill.textContent = calendarsToLoad.length
+      ? `${calendarsToLoad.length} Kalender`
+      : "Verbunden";
+  } catch (error) {
+    setMessage(
+      calendarMessage,
+      error instanceof Error ? error.message : "Kalendertermine konnten nicht geladen werden.",
+      true,
+    );
+  }
 }
 
 function getActiveShoppingList() {
@@ -418,7 +813,7 @@ async function ensureUserProfile(user) {
     userRef,
     {
       email: user.email,
-      name: user.displayName,
+      name: getDisplayNameForUser(user, existingData),
       householdId: existingData ? (existingData.householdId ?? null) : null,
       approvalStatus: existingData
         ? (existingData.approvalStatus ?? "pending")
@@ -796,6 +1191,7 @@ function showAuthenticatedUI(user) {
 function showSignedOutUI() {
   authView.classList.remove("hidden");
   appView.classList.add("hidden");
+  viewSwitcher?.classList.add("hidden");
   approvalPanel?.classList.add("hidden");
   adminPanel?.classList.add("hidden");
   createHouseholdForm?.classList.add("hidden");
@@ -811,6 +1207,14 @@ function showSignedOutUI() {
   activeListId = null;
   currentItems = [];
   currentHouseholdId = null;
+  activeView = "shopping";
+  googleCalendarAccessToken = "";
+  googleCalendarCalendars = [];
+  setCalendarConnectionState(false);
+  renderCalendarSources();
+  renderCalendarEvents([]);
+  clearMessage(calendarMessage);
+  renderActiveView();
   clearMessage(appMessage);
 }
 
@@ -837,6 +1241,7 @@ async function syncHouseholdState(user) {
   const isAdmin = profile?.role === "admin";
   const wasPreviouslyApproved = sessionStorage.getItem("approval_seen") === "true";
 
+  viewSwitcher?.classList.toggle("hidden", !isApproved);
   approvalPanel?.classList.toggle("hidden", isApproved);
   adminPanel?.classList.toggle("hidden", !isAdmin);
 
@@ -860,6 +1265,8 @@ async function syncHouseholdState(user) {
     inviteCode.textContent = "-";
     shoppingList.innerHTML = "";
     itemCount.textContent = "0 Artikel";
+    activeView = "shopping";
+    renderActiveView();
     setMessage(
       appMessage,
       profile?.approvalStatus === "rejected"
@@ -899,6 +1306,7 @@ async function syncHouseholdState(user) {
       appMessage,
       "Erstelle einen Haushalt oder trete mit einem Code bei, damit ihr gemeinsam einkaufen könnt.",
     );
+    renderActiveView();
     return;
   }
 
@@ -916,6 +1324,7 @@ async function syncHouseholdState(user) {
   clearMessage(appMessage);
   listenForShoppingLists(householdId, user);
   listenForItems(householdId);
+  renderActiveView();
 }
 
 loginButton.addEventListener("click", async () => {
@@ -950,6 +1359,86 @@ loginButton.addEventListener("click", async () => {
     }
 
     setMessage(authMessage, message || "Login fehlgeschlagen.", true);
+  }
+});
+
+shoppingViewButton?.addEventListener("click", () => {
+  activeView = "shopping";
+  renderActiveView();
+});
+
+calendarViewButton?.addEventListener("click", () => {
+  activeView = "calendar";
+  renderActiveView();
+});
+
+connectCalendarButton?.addEventListener("click", async () => {
+  clearMessage(calendarMessage);
+
+  try {
+    await requestGoogleCalendarAccess();
+    await loadGoogleCalendarEvents();
+  } catch (error) {
+    setMessage(
+      calendarMessage,
+      error instanceof Error ? error.message : "Google Kalender konnte nicht verbunden werden.",
+      true,
+    );
+  }
+});
+
+refreshCalendarButton?.addEventListener("click", async () => {
+  await loadGoogleCalendarEvents();
+});
+
+calendarRangeSelect?.addEventListener("change", async () => {
+  await loadGoogleCalendarEvents();
+});
+
+calendarSourceSelect?.addEventListener("change", async () => {
+  await loadGoogleCalendarEvents();
+});
+
+emailLoginForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  clearMessage(authMessage);
+
+  try {
+    await signInWithEmailAndPassword(
+      auth,
+      emailLoginInput.value.trim(),
+      emailLoginPassword.value,
+    );
+    emailLoginPassword.value = "";
+  } catch (error) {
+    setMessage(authMessage, formatAuthError(error), true);
+  }
+});
+
+emailRegisterForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  clearMessage(authMessage);
+
+  const name = registerNameInput.value.trim();
+  const email = registerEmailInput.value.trim();
+  const password = registerPasswordInput.value;
+
+  try {
+    const credentials = await createUserWithEmailAndPassword(auth, email, password);
+    if (name) {
+      await updateProfile(credentials.user, { displayName: name });
+    }
+    await ensureUserProfile(auth.currentUser || credentials.user);
+
+    registerNameInput.value = "";
+    registerEmailInput.value = "";
+    registerPasswordInput.value = "";
+    setMessage(
+      authMessage,
+      "Registrierung erfolgreich. Die neue Anmeldung wartet jetzt auf Freigabe.",
+    );
+  } catch (error) {
+    setMessage(authMessage, formatAuthError(error), true);
   }
 });
 
@@ -1145,10 +1634,30 @@ onAuthStateChanged(auth, async (user) => {
 
 async function initializeAuth() {
   try {
+    setCalendarConnectionState(false);
+    renderCalendarSources();
+    renderCalendarEvents([]);
+    renderActiveView();
+
     await setPersistence(auth, browserLocalPersistence);
     const redirectResult = await getRedirectResult(auth);
     if (redirectResult?.user) {
       await handleSignedInUser(redirectResult.user);
+    }
+
+    if (ensureGoogleCalendarConfigured()) {
+      initializeGoogleCalendar().catch(() => {
+        setMessage(
+          calendarMessage,
+          "Google Kalender konnte noch nicht initialisiert werden.",
+          true,
+        );
+      });
+    } else {
+      setMessage(
+        calendarMessage,
+        "Google Kalender ist vorbereitet. Es fehlen nur noch API-Key und OAuth-Client-ID in der Konfiguration.",
+      );
     }
   } catch (error) {
     setMessage(

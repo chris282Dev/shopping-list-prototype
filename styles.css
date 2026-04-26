@@ -96,6 +96,54 @@ h1 {
   gap: 20px;
 }
 
+.auth-methods {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-method-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(87, 105, 93, 0.14);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.auth-method-card h3 {
+  font-size: 1.15rem;
+}
+
+.auth-submit {
+  width: 100%;
+}
+
+.view-switcher {
+  display: inline-grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 8px;
+  align-self: start;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(87, 105, 93, 0.12);
+}
+
+.view-button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.view-button-active {
+  background: var(--primary);
+  color: #fff;
+}
+
 .panel-copy p,
 .hint-text,
 .status-text {
@@ -256,6 +304,14 @@ select:focus {
   margin-top: 12px;
 }
 
+.calendar-toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
 .profile-editor {
   display: grid;
   gap: 18px;
@@ -396,6 +452,35 @@ select:focus {
   gap: 10px;
 }
 
+.calendar-events {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  gap: 10px;
+}
+
+.calendar-event-row {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(87, 105, 93, 0.1);
+  border-radius: 18px;
+}
+
+.calendar-event-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.calendar-event-meta,
+.calendar-event-location {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .item-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -534,7 +619,8 @@ select:focus {
 
   .inline-form,
   .item-form-grid,
-  .profile-toolbar {
+  .profile-toolbar,
+  .calendar-toolbar {
     grid-template-columns: 1fr;
   }
 
@@ -558,5 +644,10 @@ select:focus {
   .danger-button {
     grid-column: 2;
     justify-self: end;
+  }
+
+  .view-switcher {
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
   }
 }

@@ -1,6 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Firebase
 .firebase/
 firebase.exe
 firepit-log.txt
-node_modules/
+
+# Env / Secrets
+firebase-config.js
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Vite
+*.local
+
+# Persoenliche Daten / lokale Doku
+Haushaltsbuch_2026.xlsx
+CLAUDE.md
+ROADMAP.md

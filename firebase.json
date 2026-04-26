@@ -3,12 +3,10 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "public": ".",
+    "public": "dist",
     "ignore": [
       "firebase.json",
       ".firebaserc",
-      "firebase.exe",
-      "firepit-log.txt",
       "**/.*",
       "**/node_modules/**"
     ],

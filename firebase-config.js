@@ -6,3 +6,8 @@ export const firebaseConfig = {
   messagingSenderId: "987530168105",
   appId: "1:987530168105:web:b40232e28b1363c2ef5938",
 };
+
+export const googleCalendarConfig = {
+  apiKey: "",
+  clientId: "",
+};
